@@ -1,3 +1,4 @@
+import psycopg2 as pg
 import pytest
 import psycopg2
 
