@@ -1,55 +1,53 @@
 import pytest
+import psycopg2
+from conftest import *
 
-def test_insert_user(db_connection):
-    """Tests that a user can be inserted into the database."""
+def test_product_price(db_connection):
+    """Tests that the price of a product is correct."""
     cur = db_connection.cursor()
-    name = "Alice Smith"
-    email = "alice@example.com"
+    product_name = "Laptop"
+    expected_price = 1200.00
 
-    cur.execute("INSERT INTO users (name, email) VALUES (%s, %s)", (name, email))
-    db_connection.commit()
-
-    cur.execute("SELECT id, name, email FROM users WHERE email = %s", (email,))
+    cur.execute("SELECT price FROM products WHERE name = %s", (product_name,))
     result = cur.fetchone()
 
     assert result is not None
-    assert result[1] == name
-    assert result[2] == email
+    assert result[0] == expected_price
     cur.close()
 
-def test_get_user_by_email(db_connection):
-    """Tests that a user can be retrieved from the database by email."""
+def test_customer_order_count(db_connection):
+    """Tests that the number of orders for a customer is correct."""
     cur = db_connection.cursor()
-    # First, insert a user (assuming test_insert_user passed)
-    name = "Bob Johnson"
-    email = "bob@example.com"
+    customer_email = "alice@example.com"
+    expected_order_count = 1
 
-    cur.execute("INSERT INTO users (name, email) VALUES (%s, %s)", (name, email))
-    db_connection.commit()
-
-    # Retrieve the user by email
-    cur.execute("SELECT id, name, email FROM users WHERE email = %s", (email,))
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM orders
+        WHERE customer_id = (SELECT id FROM customers WHERE email = %s)
+    """, (customer_email,))
     result = cur.fetchone()
 
     assert result is not None
-    assert result[1] == name
-    assert result[2] == email
+    assert result[0] == expected_order_count
     cur.close()
 
-def test_unique_email_constraint(db_connection):
-    """Tests that the unique email constraint is enforced."""
+def test_order_total(db_connection):
+    """Tests that the total value of an order is correct."""
     cur = db_connection.cursor()
-    name1 = "Charlie Brown"
-    email = "charlie@example.com"
-    name2 = "Charles Browning" # Different name, same email
+    customer_email = "bob@example.com"
+    expected_total = 150.00  # 2 Keyboards * 75.00
 
-    # Insert the first user
-    cur.execute("INSERT INTO users (name, email) VALUES (%s, %s)", (name1, email))
-    db_connection.commit()
+    cur.execute("""
+        SELECT SUM(p.price * oi.quantity)
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.id
+        JOIN orders o ON oi.order_id = o.id
+        JOIN customers c ON o.customer_id = c.id
+        WHERE c.email = %s
+    """, (customer_email,))
+    result = cur.fetchone()
 
-    # Attempt to insert a second user with the same email
-    with pytest.raises(psycopg2.errors.UniqueViolation):
-        cur.execute("INSERT INTO users (name, email) VALUES (%s, %s)", (name2, email))
-        db_connection.commit()
-    db_connection.rollback() # Important: Rollback to avoid issues with subsequent tests
+    assert result is not None
+    assert result[0] == expected_total
     cur.close()
